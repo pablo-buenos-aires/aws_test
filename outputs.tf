@@ -1,3 +1,4 @@
+/*
 output "instance_public_ip" {
   description = "Public IP address of the EC2 instance"
   value       = aws_instance.test_server1.public_ip
@@ -22,11 +23,12 @@ output "instance_hostname3" {
   value       = aws_instance.test_server3.private_dns
 }
 
-
 output "vpc_id" {
   description = "The ID of the VPC"
   value       = module.vpc.vpc_id
 }
+
+*/
 
 ## from amazon examples
 /*
