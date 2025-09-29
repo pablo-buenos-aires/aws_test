@@ -44,22 +44,7 @@ output "my_subnets" { # мои подсети
 # ------------------------------------------------------------------------------------------- IGW
 resource "aws_internet_gateway" "igw" { vpc_id = aws_vpc.my_vpc.id } # IGW для доступа VPC в интернет
 
-resource "aws_route_table" "rt_igw" { # марш. таблица
-  	vpc_id = aws_vpc.my_vpc.id
-  	route {
-    		cidr_block = "0.0.0.0/0"                 # исходящий трафик во все подсети
-    		gateway_id = aws_internet_gateway.igw.id # идёт через igw
-  		}	
-	}	
-
-resource "aws_route_table_association" "rt_igw_ass" { # Привязка таблицы к публичной подсети
- 	subnet_id      = aws_subnet.public_subnet.id
-  	route_table_id = aws_route_table.rt_igw.id
-	}
-
-output "rt_igw_routes" {  value = aws_route_table.rt_igw.route }  # вывод маршрутов
-
-# ------------------------------------------------------------------------------------------- bastion SG 
+# -------------------------------------------------------------------------------------------  bastion/nat SG
 resource "aws_security_group" "nat_sg" {  # разрешаем входящий трафик по SSH и любой из приватной подсети, для NAT
    	vpc_id      = aws_vpc.my_vpc.id
 	ingress {
@@ -69,7 +54,7 @@ resource "aws_security_group" "nat_sg" {  # разрешаем входящий 
     	cidr_blocks = ["0.0.0.0/0"] # со всех адресов
    	}
 
-   	ingress {
+   	ingress { # for private subnet, NAT
     	from_port   = 0
     	to_port     = 0
     	protocol    = "-1"  #  любой протокол
@@ -122,9 +107,52 @@ resource "aws_instance" "pub_ubuntu" { # создаем инстанс
   associate_public_ip_address = true # выделение внешнего IP
 }
 
-output "ami_name" { value = data.aws_ami.ubuntu_24.name } # имя образа
-output "instance_id"  { value = aws_instance.pub_ubuntu.id } # id инстанса
+# ------------------------------------------------------------------------------------------- SG приватный инстанс
+resource "aws_security_group" "private_sg" {
+   	vpc_id      = aws_vpc.my_vpc.id
+	ingress { # разрешаем входящий трафик по SSH от бастиона
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    security_groups = [aws_security_group.nat_sg.id]
+    }
+  	egress { # исходящий трафик открыт
+    	from_port   = 0
+    	to_port     = 0
+    	protocol    = "-1"
+    	cidr_blocks = ["0.0.0.0/0"]
+  	}
+}
+
+resource "aws_instance" "priv_ubuntu" { # создаем приватный инстанс
+  ami                    = data.aws_ami.ubuntu_24.id
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.private_subnet.id # создаем в приватной полдсети
+  vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
+  key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
+ }
+
+output "bastion_name" { value = data.aws_ami.ubuntu_24.name } # имя образа
+output "public_instance_id"  { value = aws_instance.pub_ubuntu.id } # id инстанса
 output "public_ip"    { value = aws_instance.pub_ubuntu.public_ip } # публичный IP
 output "public_dns"   { value = aws_instance.pub_ubuntu.public_dns } # DNS
+
+output "private_instance_id"  { value = aws_instance.priv_ubuntu.id } # id инстанса
+# ---------------------------------------------------------------------------------------- маршруты
+resource "aws_route_table" "rt_pub" { # марш. таблица для публичной подсети
+  	vpc_id = aws_vpc.my_vpc.id
+  	route {
+    		cidr_block = "0.0.0.0/0"                 # исходящий трафик во все подсети
+    		gateway_id = aws_internet_gateway.igw.id # идёт через igw
+  		}
+	}
+
+resource "aws_route_table_association" "rt_pub_ass" { # Привязка таблицы к публичной подсети
+ 	subnet_id      = aws_subnet.public_subnet.id
+  	route_table_id = aws_route_table.rt_pub.id
+	}
+
+output "rt_pub_routes" {  value = aws_route_table.rt_pub.route }  # вывод маршрутов
+
 
 # ------------------------------------------------------------------------------------------- NAT
