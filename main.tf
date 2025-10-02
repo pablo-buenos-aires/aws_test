@@ -98,7 +98,6 @@ resource "aws_key_pair" "ssh_aws_key" {  # регистрируем ключ
 
   /*
   	# Сохраняем приватный ключ в файл локально, утанавливаем права только чтение для владельца
-
   	provisioner "local-exec" { # действие после создания ресурса
    	 command = <<'EOT'
     	  echo '${tls_private_key.ssh_key.private_key_pem}' > ssh-key.pem
@@ -230,4 +229,34 @@ output "rt_priv_routes_inline" {  value = aws_route_table.rt_priv.route }
 
 data "aws_route_table" "rt_priv_read" { route_table_id = aws_route_table.rt_priv.id }
 output "rt_priv_routes" {  value = data.aws_route_table.rt_priv_read.routes }
-# ------------------------------------------------------------------------------------------- NAT
+# -------------------------------------------------------------------------------------------
+
+
+############################################
+# 🔒 Default Security Group: manage/clean
+############################################
+# Специальный ресурс, который управляет ИМЕННО default SG в данном VPC.
+# Его нельзя удалить, но можно задать правила.
+resource "aws_default_security_group" "this" {
+  vpc_id                 = aws_vpc.my_vpc.id
+  revoke_rules_on_delete = true
+
+  ingress = []
+
+  # ИСХОДЯЩИЕ: разрешаем всё (поведение "как по умолчанию", удобно для тестов)
+  egress = [
+    {
+      description      = "all egress"
+      from_port        = 0
+      to_port          = 0
+      protocol         = "-1"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = ["::/0"]
+      prefix_list_ids  = []
+      security_groups  = []
+      self             = false
+    }
+  ]
+
+  tags = { Name = "CLEANED-DEFAULT-SG" }
+}
