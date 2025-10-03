@@ -1,5 +1,4 @@
-variable "instance_type" {
-  description = "The EC2 instance's type."
+variable "t3" {
   type        = string
   default     = "t3.micro"
 }

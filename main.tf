@@ -1,28 +1,8 @@
-terraform { # блок настройки терраформ
-	required_version = ">= 1.2" # страховка от несовместимости кода со старой версией терраформ
-	# офиц. плагин для авс, 6 версия актуальная
-	required_providers { aws = {  source   = "hashicorp/aws",  version = ">= 6.0"  } } 
-	
-	}
- 
-provider "aws" { region = "sa-east-1" } # блок провайдера
-data "aws_caller_identity" "me" {} #  ресурсы для запроса моего arn, кем являюсь 
-data "aws_region" "here" {} # запроса региона
-
-# output "account_id" { value = data.aws_caller_identity.me.account_id }
-output "arn"        { value = data.aws_caller_identity.me.arn } # вывод параметров ресурса
-output "region"     { value = data.aws_region.here.region } # и региона
-
-# ----------------------------------------------------------------------------- VPC, подсети
-resource "aws_vpc" "my_vpc" { # создаем vpc 
+resource "aws_vpc" "my_vpc" { # создаем vpc
   	cidr_block           = "10.0.0.0/16" # диапазон адресов
   	enable_dns_hostnames = true    # включаем dns hostname, для доступа к публичному инстансу	
 	}
   
-output "vpc_id"   { value =  aws_vpc.my_vpc.id } # вывод vpc id
-
-data "aws_availability_zones" "zones" { state = "available" } # встроенный источник данных
-
 resource "aws_subnet" "public_subnet" { # публичная подсеть
   	vpc_id            = aws_vpc.my_vpc.id
   	cidr_block        = "10.0.1.0/24" 
@@ -34,12 +14,6 @@ resource "aws_subnet" "private_subnet" { # приватная подсеть в 
   	cidr_block        = "10.0.2.0/24" 
   	availability_zone = data.aws_availability_zones.zones.names[0]
 	}		
-
-output "myAZ_public"   { value =  aws_subnet.public_subnet.availability_zone } # вывод aZ
-output "public_subnet" { value  = aws_subnet.public_subnet.id }
-output "private_subnet" { value  = aws_subnet.private_subnet.id }
-
-
 
 # ------------------------------------------------------------------------------------------- IGW
 resource "aws_internet_gateway" "igw" { vpc_id = aws_vpc.my_vpc.id } # IGW для доступа VPC в интернет
@@ -109,18 +83,10 @@ resource "local_file" "file_ssh_pub" {
   filename = "${path.module}/ssh-key.pub"
 }
 # --------------------------------------------------------------------------------------- публичный инстанс
-data "aws_ami" "ubuntu_24" { # находим последний образ ubuntu 24.04
-  most_recent = true
-  owners      = ["099720109477"] # идентификатор разработчика ubuntu
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
-  }
-}
 
 resource "aws_instance" "pub_ubuntu" { # создаем инстанс
   ami                    = data.aws_ami.ubuntu_24.id
-  instance_type          = "t3.micro"
+  instance_type          = var.t3
   subnet_id              = aws_subnet.public_subnet.id # в публичной полдсети
   vpc_security_group_ids = [aws_security_group.nat_sg.id] # группа безопасности
   key_name               = aws_key_pair.ssh_aws_key.key_name # созданный выше SSH ключ
@@ -155,7 +121,7 @@ EOT
 
 resource "aws_instance" "priv_ubuntu" { # создаем приватный инстанс
   ami                    = data.aws_ami.ubuntu_24.id
-  instance_type          = "t3.micro"
+  instance_type          = var.t3
   subnet_id              = aws_subnet.private_subnet.id # в приватной полдсети
   vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
   key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
