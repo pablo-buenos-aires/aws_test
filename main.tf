@@ -96,16 +96,6 @@ resource "aws_key_pair" "ssh_aws_key" {  # регистрируем ключ
   	public_key = tls_private_key.ssh_key.public_key_openssh # ключ в формате Openssh
     key_name   = "tf-ssh-key" # без этого не связывает ключи корректно
 
-  /*
-  	# Сохраняем приватный ключ в файл локально, утанавливаем права только чтение для владельца
-  	provisioner "local-exec" { # действие после создания ресурса
-   	 command = <<'EOT'
-    	  echo '${tls_private_key.ssh_key.private_key_pem}' > ssh-key.pem
-    	  echo '${tls_private_key.ssh_key.public_key_openssh}' > ssh-key.pub
-     	 chmod 400 ssh-key.pem
-    	EOT
-  	}
-*/
 }
 
 resource "local_file" "file_ssh_priv" { # без provisioner — через local_file
@@ -136,44 +126,30 @@ resource "aws_instance" "pub_ubuntu" { # создаем инстанс
   key_name               = aws_key_pair.ssh_aws_key.key_name # созданный выше SSH ключ
   associate_public_ip_address = true # выделение внешнего IP
 
-  # Отключаем Source/Dest Check для работы в режиме NAT
-/*
-  source_dest_check = false
+  source_dest_check = false #n чтобы работал NAT
 
   # Скрипт user_data для настройки NAT (включаем IP forwarding и NAT masquerade)
-  user_data = <<-EOT
-    #!/bin/bash
-    sysctl -w net.ipv4.ip_forward=1
-    EXT_IF=$(ip route show default | awk '{print $5}' | head -n1)
-    iptables -t nat -A POSTROUTING -o "$EXT_IF" -j MASQUERADE
-  EOT
-
   user_data = <<EOT
+#!/bin/bash
 set -euxo pipefail  # error,undefuned, exec, честные пайплайны ошибок
 
-# Включаем форвардинг навсегда
-cat >/etc/sysctl.d/99-nat.conf <<EOF
-net.ipv4.ip_forward=1
-EOF
+# Включаем форвардинг и делаем это постоянным
+sysctl -w net.ipv4.ip_forward=1
+echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-nat.conf #  reboot-safe
 sysctl --system
 
-# Определяем внешний интерфейс по default route
-EXT_IF=$(ip route show default | awk '{print $5}' | head -n1)
-: "$${EXT_IF:?no default route iface detected}"
-
-# Опционально ограничим NAT исходным CIDR VPC (подставит Terraform)
+# CIDR вашей VPC подставит Terraform
 VPC_CIDR="${aws_vpc.my_vpc.cidr_block}"
 
-# Маскарадинг (проверяем, чтобы не дублировать правило)
-iptables -t nat -C POSTROUTING -s "$VPC_CIDR" -o "$EXT_IF" -j MASQUERADE 2>/dev/null \
-  || iptables -t nat -A POSTROUTING -s "$VPC_CIDR" -o "$EXT_IF" -j MASQUERADE
+# Аккуратно берём внешний интерфейс по default route (IPv4)
+EXT_IF="$(ip -o -4 route show to default | awk '{print $5}' | head -n1)"
 
-# Сохранение правил на Ubuntu
-apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
-netfilter-persistent save
+# Добавляем MASQUERADE, если ещё нет (чтобы не дублировать)
+if ! iptables -t nat -C POSTROUTING -s "$VPC_CIDR" -o "$EXT_IF" -j MASQUERADE 2>/dev/null; then
+  iptables -t nat -A POSTROUTING -s "$VPC_CIDR" -o "$EXT_IF" -j MASQUERADE
+fi
 EOT
-*/
+
 }
 
 
@@ -235,28 +211,26 @@ output "rt_priv_routes" {  value = data.aws_route_table.rt_priv_read.routes }
 ############################################
 # 🔒 Default Security Group: manage/clean
 ############################################
-# Специальный ресурс, который управляет ИМЕННО default SG в данном VPC.
+# Специальный ресурс, который управляет default SG в данном VPC.
 # Его нельзя удалить, но можно задать правила.
-resource "aws_default_security_group" "this" {
+resource "aws_default_security_group" "def_sg" {
   vpc_id                 = aws_vpc.my_vpc.id
-  revoke_rules_on_delete = true
-
+  revoke_rules_on_delete = true # чтобы  удалялись правила перед удалением группы (destroy)
   ingress = []
 
-  # ИСХОДЯЩИЕ: разрешаем всё (поведение "как по умолчанию", удобно для тестов)
   egress = [
-    {
-      description      = "all egress"
-      from_port        = 0
+  {
+     description      = ""                 # нужно полный список для aws_def_sec
       to_port          = 0
+      from_port        = 0
       protocol         = "-1"
       cidr_blocks      = ["0.0.0.0/0"]
-      ipv6_cidr_blocks = ["::/0"]
+      ipv6_cidr_blocks = []                 #
       prefix_list_ids  = []
       security_groups  = []
       self             = false
-    }
-  ]
 
-  tags = { Name = "CLEANED-DEFAULT-SG" }
+  }
+]
+
 }
