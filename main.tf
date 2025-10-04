@@ -82,7 +82,7 @@ resource "local_file" "file_ssh_pub" {
   content  = tls_private_key.ssh_key.public_key_openssh
   filename = "${path.module}/ssh-key.pub"
 }
-# --------------------------------------------------------------------------------------- публичный инстанс
+# --------------------------------------------------------------------------------------- инстансы
 
 resource "aws_instance" "pub_ubuntu" { # создаем инстанс
   ami                    = data.aws_ami.ubuntu_24.id
@@ -94,10 +94,16 @@ resource "aws_instance" "pub_ubuntu" { # создаем инстанс
 
   source_dest_check = false #n чтобы работал NAT
 
-  # Скрипт user_data для настройки NAT (включаем IP forwarding и NAT masquerade)
   user_data = <<EOT
 #!/bin/bash
 set -euxo pipefail  # error,undefuned, exec, честные пайплайны ошибок
+export DEBIAN_FRONTEND=noninteractive # чтобы не было вопросов
+echo "netfilter-persistent netfilter-persistent/autosave_v4 boolean true" | debconf-set-selections
+echo "netfilter-persistent netfilter-persistent/autosave_v6 boolean false" | debconf-set-selections
+
+#  пакеты для автосохранения правил
+apt-get update -y
+apt-get install -y netfilter-persistent
 
 # Включаем форвардинг и делаем это постоянным
 sysctl -w net.ipv4.ip_forward=1
@@ -114,10 +120,12 @@ EXT_IF="$(ip -o -4 route show to default | awk '{print $5}' | head -n1)"
 if ! iptables -t nat -C POSTROUTING -s "$VPC_CIDR" -o "$EXT_IF" -j MASQUERADE 2>/dev/null; then
   iptables -t nat -A POSTROUTING -s "$VPC_CIDR" -o "$EXT_IF" -j MASQUERADE
 fi
+#
+netfilter-persistent save
+systemctl enable --now netfilter-persistent
 EOT
 
 }
-
 
 resource "aws_instance" "priv_ubuntu" { # создаем приватный инстанс
   ami                    = data.aws_ami.ubuntu_24.id
@@ -127,12 +135,6 @@ resource "aws_instance" "priv_ubuntu" { # создаем приватный ин
   key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
  }
 
-output "image_name" { value = data.aws_ami.ubuntu_24.name } # имя образа
-output "public_instance_id"  { value = aws_instance.pub_ubuntu.id } # id инстанса
-output "private_instance_id"  { value = aws_instance.priv_ubuntu.id } # id инстанса 2
-output "public_ip"    { value = aws_instance.pub_ubuntu.public_ip }
-output "private_ip"    { value = aws_instance.priv_ubuntu.private_ip } #
-output "public_dns"   { value = aws_instance.pub_ubuntu.public_dns } # DNS
 
 # ---------------------------------------------------------------------------------------- маршруты
 resource "aws_route_table" "rt_pub" { # марш. таблица для публичной подсети
@@ -164,39 +166,5 @@ resource "aws_route_table_association" "rt_priv_ass" { # связь с прив�
   subnet_id      = aws_subnet.private_subnet.id
   route_table_id = aws_route_table.rt_priv.id
 }
-# вывод инлайн-маршрутов
-output "rt_pub_routes_inline" {  value = aws_route_table.rt_pub.route }  # вывод маршрутов
-
-output "rt_priv_routes_inline" {  value = aws_route_table.rt_priv.route }
-
-data "aws_route_table" "rt_priv_read" { route_table_id = aws_route_table.rt_priv.id }
-output "rt_priv_routes" {  value = data.aws_route_table.rt_priv_read.routes }
-# -------------------------------------------------------------------------------------------
 
 
-############################################
-# 🔒 Default Security Group: manage/clean
-############################################
-# Специальный ресурс, который управляет default SG в данном VPC.
-# Его нельзя удалить, но можно задать правила.
-resource "aws_default_security_group" "def_sg" {
-  vpc_id                 = aws_vpc.my_vpc.id
-  revoke_rules_on_delete = true # чтобы  удалялись правила перед удалением группы (destroy)
-  ingress = []
-
-  egress = [
-  {
-     description      = ""                 # нужно полный список для aws_def_sec
-      to_port          = 0
-      from_port        = 0
-      protocol         = "-1"
-      cidr_blocks      = ["0.0.0.0/0"]
-      ipv6_cidr_blocks = []                 #
-      prefix_list_ids  = []
-      security_groups  = []
-      self             = false
-
-  }
-]
-
-}
