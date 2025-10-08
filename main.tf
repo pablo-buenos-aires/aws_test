@@ -27,14 +27,14 @@ resource "aws_security_group" "nat_sg" {  # разрешаем входящий 
     	protocol    = "tcp"
     	cidr_blocks = ["0.0.0.0/0"] # со всех адресов
    	}
-
+ /*
    	ingress { # for private subnet, NAT
     	from_port   = 0
     	to_port     = 0
     	protocol    = "-1"  #  любой протокол
     	cidr_blocks = [aws_subnet.private_subnet.cidr_block]
   	}
-  	
+  	*/
   	egress { # исходящий трафик открыт 
     	from_port   = 0
     	to_port     = 0
@@ -58,7 +58,23 @@ resource "aws_security_group" "private_sg" {
     	cidr_blocks = ["0.0.0.0/0"]
   	}
 }
+# ------------------------------------------------------------------------------------------- SG endpoints
+resource "aws_security_group" "endpoint_sg" { # для SSM endpoints
+   	vpc_id      = aws_vpc.my_vpc.id
+	ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.my_vpc.cidr_block]
+   }
 
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    }
+}
 # ------------------------------------------------------------------------------------------- ключи
 resource "tls_private_key" "ssh_key" { # генерация ключа через встроенного провайдера
 	algorithm = "RSA" 
@@ -91,8 +107,9 @@ resource "aws_instance" "pub_ubuntu" { # создаем инстанс
   vpc_security_group_ids = [aws_security_group.nat_sg.id] # группа безопасности
   key_name               = aws_key_pair.ssh_aws_key.key_name # созданный выше SSH ключ
   associate_public_ip_address = true # выделение внешнего IP
-
   source_dest_check = false #n чтобы работал NAT
+
+  iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль от роли SSM
 
   user_data = <<EOT
 #!/bin/bash
@@ -133,6 +150,8 @@ resource "aws_instance" "priv_ubuntu" { # создаем приватный ин
   subnet_id              = aws_subnet.private_subnet.id # в приватной полдсети
   vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
   key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
+
+   iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль SSM
  }
 
 
@@ -156,15 +175,67 @@ resource "aws_route_table" "rt_priv" {
 resource "aws_route" "rt_priv_route" { # нужен отдельно маршрут, инлайн нельзя для instance_id
   route_table_id         = aws_route_table.rt_priv.id
   destination_cidr_block = "0.0.0.0/0"
- # instance_id = aws_instance.pub_ubuntu.id  # твой NAT/bastion инстанс
-  network_interface_id   = aws_instance.pub_ubuntu.primary_network_interface_id
+ # instance_id = aws_instance.pub_ubuntu.id  #  NAT/bastion инстанс
+  network_interface_id   = aws_instance.pub_ubuntu.primary_network_interface_id # в новых провайдерах через ENI
   depends_on = [aws_instance.pub_ubuntu]   # дождаться инстанса
   }
 
-
+/* # отключим, доступ по SSM теперь
 resource "aws_route_table_association" "rt_priv_ass" { # связь с приват.
   subnet_id      = aws_subnet.private_subnet.id
   route_table_id = aws_route_table.rt_priv.id
 }
+*/
 
+#--------------------------------------------------------------------------- настройка SSM для инстансов
+resource "aws_iam_role" "ssm_role" { # роль создаем
+  name = "ssm_role_name"
+  assume_role_policy = jsonencode({  # для получения JSON для амазон
+    Version = "2012-10-17" # обязательное поле
+    Statement = [{  #  список правил
+      Action    = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" } # кто может эту роль использовать, в т.ч инстансы ec2s
 
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_core" { # добавление политики к роли для SSM длоступа
+  role       = aws_iam_role.ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm_profile" { # профиль на базе роли, для привязки к инстансам
+  name = "ssm_profile_name"
+  role = aws_iam_role.ssm_role.name
+}
+
+#------------------------------------------------------------------------- настройка  endpoints
+resource "aws_vpc_endpoint" "endpoints" {
+   for_each = {
+    ssm         = "com.amazonaws.${data.aws_region.here.region}.ssm"
+    ec2messages = "com.amazonaws.${data.aws_region.here.region}.ec2messages"
+    ssmmessages = "com.amazonaws.${data.aws_region.here.region}.ssmmessages"
+  }
+  vpc_id              = aws_vpc.my_vpc.id
+  service_name        = each.value
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids          = [aws_subnet.private_subnet.id] # subnets
+  security_group_ids  = [aws_security_group.endpoint_sg.id]
+}
+
+# красивый вывод
+output "ssm_interface_endpoints" { # вывод эндпоинто
+  value = {
+    for k, endp in aws_vpc_endpoint.endpoints: # генератор k -> ключ словаря
+    k => { # значения списком
+      id           = endp.id
+      service      = endp.service_name
+      # dns_names    = endp.dns_entry[*].dns_name
+      # network_ifcs = endp.network_interface_ids # какие интерфейсы созданы для эндпоинта
+    }
+  }
+}
