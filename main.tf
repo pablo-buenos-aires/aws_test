@@ -9,11 +9,17 @@ resource "aws_subnet" "public_subnet" { # публичная подсеть
   	availability_zone = data.aws_availability_zones.zones.names[0]
 	}
 
-resource "aws_subnet" "private_subnet" { # приватная подсеть в той же зоне 
+resource "aws_subnet" "private_subnet_1" { # приватная подсеть в той же зоне
   	vpc_id            = aws_vpc.my_vpc.id
   	cidr_block        = "10.0.2.0/24" 
   	availability_zone = data.aws_availability_zones.zones.names[0]
 	}		
+
+resource "aws_subnet" "private_subnet_2" { # приватная подсеть в соседне зоне
+  	vpc_id            = aws_vpc.my_vpc.id
+  	cidr_block        = "10.0.3.0/24"
+  	availability_zone = data.aws_availability_zones.zones.names[1]
+	}
 
 # ------------------------------------------------------------------------------------------- IGW
 resource "aws_internet_gateway" "igw" { vpc_id = aws_vpc.my_vpc.id } # IGW для доступа VPC в интернет
@@ -27,14 +33,14 @@ resource "aws_security_group" "nat_sg" {  # разрешаем входящий 
     	protocol    = "tcp"
     	cidr_blocks = ["0.0.0.0/0"] # со всех адресов
    	}
- /*
+
    	ingress { # for private subnet, NAT
     	from_port   = 0
     	to_port     = 0
     	protocol    = "-1"  #  любой протокол
-    	cidr_blocks = [aws_subnet.private_subnet.cidr_block]
+    	cidr_blocks = [aws_subnet.private_subnet_1.cidr_block, aws_subnet.private_subnet_2.cidr_block]
   	}
-  	*/
+
   	egress { # исходящий трафик открыт 
     	from_port   = 0
     	to_port     = 0
@@ -127,7 +133,7 @@ sysctl -w net.ipv4.ip_forward=1
 echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-nat.conf #  reboot-safe
 sysctl --system
 
-# CIDR вашей VPC подставит Terraform
+# CIDR подставит terraform
 VPC_CIDR="${aws_vpc.my_vpc.cidr_block}"
 
 # Аккуратно берём внешний интерфейс по default route (IPv4)
@@ -143,17 +149,26 @@ systemctl enable --now netfilter-persistent
 EOT
 
 }
-
-resource "aws_instance" "priv_ubuntu" { # создаем приватный инстанс
+# ---------------------------------------------------------- два приватный инстанса в разных зонах доступности
+resource "aws_instance" "priv_ubuntu_1" { # создаем приватный инстанс
   ami                    = data.aws_ami.ubuntu_24.id
   instance_type          = var.t3
-  subnet_id              = aws_subnet.private_subnet.id # в приватной полдсети
+  subnet_id              = aws_subnet.private_subnet_1.id # в приватной полдсети
   vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
   key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
 
    iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль SSM
  }
 
+resource "aws_instance" "priv_ubuntu_2" { # создаем приватный инстанс
+  ami                    = data.aws_ami.ubuntu_24.id
+  instance_type          = var.t3
+  subnet_id              = aws_subnet.private_subnet_2.id # в приватной полдсети
+  vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
+  key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
+
+   iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль SSM
+ }
 
 # ---------------------------------------------------------------------------------------- маршруты
 resource "aws_route_table" "rt_pub" { # марш. таблица для публичной подсети
@@ -172,6 +187,8 @@ resource "aws_route_table" "rt_priv" {
     vpc_id = aws_vpc.my_vpc.id
     }
 
+# отключим маршрут, доступ по SSM теперь
+
 resource "aws_route" "rt_priv_route" { # нужен отдельно маршрут, инлайн нельзя для instance_id
   route_table_id         = aws_route_table.rt_priv.id
   destination_cidr_block = "0.0.0.0/0"
@@ -180,12 +197,18 @@ resource "aws_route" "rt_priv_route" { # нужен отдельно маршр�
   depends_on = [aws_instance.pub_ubuntu]   # дождаться инстанса
   }
 
-/* # отключим, доступ по SSM теперь
-resource "aws_route_table_association" "rt_priv_ass" { # связь с приват.
-  subnet_id      = aws_subnet.private_subnet.id
+
+
+resource "aws_route_table_association" "rt_priv_ass_1" { # связь с приват 1.
+  subnet_id      = aws_subnet.private_subnet_1.id
   route_table_id = aws_route_table.rt_priv.id
 }
-*/
+
+resource "aws_route_table_association" "rt_priv_ass_2" { # связь с приват 2.
+  subnet_id      = aws_subnet.private_subnet_2.id
+  route_table_id = aws_route_table.rt_priv.id
+}
+
 
 #--------------------------------------------------------------------------- настройка SSM для инстансов
 resource "aws_iam_role" "ssm_role" { # роль создаем
@@ -223,7 +246,7 @@ resource "aws_vpc_endpoint" "endpoints" {
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
 
-  subnet_ids          = [aws_subnet.private_subnet.id] # subnets
+  subnet_ids          = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id] # в каждой подсети эндпоинты
   security_group_ids  = [aws_security_group.endpoint_sg.id]
 }
 

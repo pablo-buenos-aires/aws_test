@@ -12,5 +12,5 @@ data "aws_ami" "ubuntu_24" { # находим последний образ ubun
   }
 }
 
-
+data "aws_route_table" "rt_priv_read" { route_table_id = aws_route_table.rt_priv.id }
 
