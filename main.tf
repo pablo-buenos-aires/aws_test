@@ -150,15 +150,60 @@ EOT
 
 }
 # ---------------------------------------------------------- два приватный инстанса в разных зонах доступности
-resource "aws_instance" "priv_ubuntu_1" { # создаем приватный инстанс
-  ami                    = data.aws_ami.ubuntu_24.id
-  instance_type          = var.t3
-  subnet_id              = aws_subnet.private_subnet_1.id # в приватной полдсети
-  vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
-  key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
+# шаблон без привязки к подсетям
+resource "aws_launch_template" "l_templ_1" {
+  name_prefix = "l-templ-1"
+  image_id    = data.aws_ami.ubuntu_24.id
+  instance_type = var.t3
+  key_name = aws_key_pair.ssh_aws_key.key_name
+ # нужен блок
+  iam_instance_profile { name = aws_iam_instance_profile.ssm_profile.name }
+  vpc_security_group_ids = [aws_security_group.private_sg.id]
 
-   iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль SSM
- }
+  #network_interfaces { security_groups = [aws_security_group.private_sg.id] }
+}
+# -------------------------------------------------------------------------- Asg
+resource "aws_autoscaling_group" "priv_asg" {
+  name                      = "priv-asg"
+  min_size                  = 2
+  desired_capacity          = 2
+  max_size                  = 4
+  health_check_type         = "EC2" # проверка доступности инстанса
+  health_check_grace_period = 120 # время на инит, потом проверка доступности
+  capacity_rebalance        = true # если зона отвалится, на других сделает инстансы
+
+  wait_for_capacity_timeout = "10m" # для терраформ, чтобы  ожидать перехода asg в нужное состояние
+  # приватные подсети, по зонам доступности
+  vpc_zone_identifier = [  aws_subnet.private_subnet_1.id,  aws_subnet.private_subnet_2.id]
+
+  # привязка Launch Template
+  launch_template {
+    id      = aws_launch_template.l_templ_1.id
+    version = aws_launch_template.l_templ_1.latest_version
+  }
+  # в каком порядке завершать инстансы при уменьшении
+  termination_policies = ["OldestInstance", "ClosestToNextInstanceHour"] # старые и где оплаченые часы меньше
+
+  depends_on = [
+    aws_route_table_association.rt_priv_ass_1,
+    aws_route_table_association.rt_priv_ass_2,
+    aws_vpc_endpoint.endpoints           # чтобы SSM работал
+  ]
+}
+/*
+resource "aws_instance" "priv_ubuntu_1" { # создаем приватный инстанс
+  #ami                    = data.aws_ami.ubuntu_24.id
+ # instance_type          = var.t3
+ # subnet_id              = aws_subnet.private_subnet_1.id # в приватной полдсети
+ # vpc_security_group_ids = [aws_security_group.private_sg.id] # группа безопасности
+  #key_name               = aws_key_pair.ssh_aws_key.key_name # используеми тот же ключ
+  # iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль SSM
+  launch_template {
+    id      = aws_launch_template.l_templ_1.id
+    version = aws_launch_template.l_templ_1.latest_version
+    # version = "$Latest" # амазон выберет послед. версия
+  }
+}
 
 resource "aws_instance" "priv_ubuntu_2" { # создаем приватный инстанс
   ami                    = data.aws_ami.ubuntu_24.id
@@ -169,7 +214,7 @@ resource "aws_instance" "priv_ubuntu_2" { # создаем приватный и
 
    iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль SSM
  }
-
+*/
 # ---------------------------------------------------------------------------------------- маршруты
 resource "aws_route_table" "rt_pub" { # марш. таблица для публичной подсети
   	vpc_id = aws_vpc.my_vpc.id
@@ -178,6 +223,7 @@ resource "aws_route_table" "rt_pub" { # марш. таблица для публ
     		gateway_id = aws_internet_gateway.igw.id # идёт через igw
   		}
 	}
+
 resource "aws_route_table_association" "rt_pub_ass" { # Привязка таблицы к публичной подсети
  	subnet_id      = aws_subnet.public_subnet.id
   	route_table_id = aws_route_table.rt_pub.id
@@ -188,7 +234,6 @@ resource "aws_route_table" "rt_priv" {
     }
 
 # отключим маршрут, доступ по SSM теперь
-
 resource "aws_route" "rt_priv_route" { # нужен отдельно маршрут, инлайн нельзя для instance_id
   route_table_id         = aws_route_table.rt_priv.id
   destination_cidr_block = "0.0.0.0/0"
@@ -250,15 +295,3 @@ resource "aws_vpc_endpoint" "endpoints" {
   security_group_ids  = [aws_security_group.endpoint_sg.id]
 }
 
-# красивый вывод
-output "ssm_interface_endpoints" { # вывод эндпоинто
-  value = {
-    for k, endp in aws_vpc_endpoint.endpoints: # генератор k -> ключ словаря
-    k => { # значения списком
-      id           = endp.id
-      service      = endp.service_name
-      # dns_names    = endp.dns_entry[*].dns_name
-      # network_ifcs = endp.network_interface_ids # какие интерфейсы созданы для эндпоинта
-    }
-  }
-}

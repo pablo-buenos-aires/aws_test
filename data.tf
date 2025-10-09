@@ -12,5 +12,7 @@ data "aws_ami" "ubuntu_24" { # находим последний образ ubun
   }
 }
 
-data "aws_route_table" "rt_priv_read" { route_table_id = aws_route_table.rt_priv.id }
+# data "aws_route_table" "rt_priv_read" { route_table_id = aws_route_table.rt_priv.id }
 
+# from amazon
+data "aws_autoscaling_group" "data_priv_asg" { name = aws_autoscaling_group.priv_asg.name }
