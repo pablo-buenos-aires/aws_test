@@ -2,14 +2,27 @@
 #!/usr/bin/env bash
 KEY_PATH="/home/pablo/terraform-aws/ssh-key.pem"
 
-INST_ID="private_instance_id_1"
+INST_INDEX="0"
 
 if [[ $# -ge 1 ]]; then
-  INST_ID="private_instance_id_$1"
+INST_INDEX=$1
+fi
+#echo $INST_INDEX
+echo "List of asg instances:"
+json="$(terraform output -json asg_instance_ids)"
+echo $json
+
+#terraform output -json asg_instance_ids
+PRIV_ID="$(echo $json | jq -r .[$INST_INDEX])"
+# Проверка, что ID не пустой и не null
+if [[ -z "$PRIV_ID" || "$PRIV_ID" == "null" ]]; then
+  echo "❌ Ошибка: элемент с индексом $INST_INDEX не найден." >&2 # markdown!
+  exit 1
 fi
 
-PRIV_ID="$(terraform output -raw "$INST_ID")"
+echo "💸 Connecting to $PRIV_ID"
 
-#aws ssm start-session --target $(terraform output -raw private_instance_id)
+
+#aws ssm start-session --target $PRIV_ID
 ssh  -o "ProxyCommand=aws ssm start-session  --target %h  --document-name AWS-StartSSHSession \
-  --parameters 'portNumber=%p'" -i "$KEY_PATH" "ubuntu@$PRIV_ID"
+#  --parameters 'portNumber=%p'" -i "$KEY_PATH" "ubuntu@$PRIV_ID"

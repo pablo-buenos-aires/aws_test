@@ -151,7 +151,7 @@ EOT
 }
 # ---------------------------------------------------------- два приватный инстанса в разных зонах доступности
 # шаблон без привязки к подсетям
-resource "aws_launch_template" "l_templ_1" {
+resource "aws_launch_template" "l_templ" {
   name_prefix = "l-templ-1"
   image_id    = data.aws_ami.ubuntu_24.id
   instance_type = var.t3
@@ -178,8 +178,8 @@ resource "aws_autoscaling_group" "priv_asg" {
 
   # привязка Launch Template
   launch_template {
-    id      = aws_launch_template.l_templ_1.id
-    version = aws_launch_template.l_templ_1.latest_version
+    id      = aws_launch_template.l_templ.id
+    version = aws_launch_template.l_templ.latest_version
   }
   # в каком порядке завершать инстансы при уменьшении
   termination_policies = ["OldestInstance", "ClosestToNextInstanceHour"] # старые и где оплаченые часы меньше
@@ -190,6 +190,22 @@ resource "aws_autoscaling_group" "priv_asg" {
     aws_vpc_endpoint.endpoints           # чтобы SSM работал
   ]
 }
+# Null resource, который зависим от ASG, и выполняет команду AWS CLI
+resource "null_resource" "get_priv_instances" {
+  depends_on = [aws_autoscaling_group.priv_asg]
+
+  provisioner "local-exec" {
+    command = <<EOT
+      aws autoscaling describe-auto-scaling-groups \
+        --auto-scaling-group-names ${aws_autoscaling_group.priv_asg.name} \
+        --query 'AutoScalingGroups[0].Instances[*].InstanceId' \
+        --output json > asg_instances.json
+    EOT
+  }
+}
+
+
+
 /*
 resource "aws_instance" "priv_ubuntu_1" { # создаем приватный инстанс
   #ami                    = data.aws_ami.ubuntu_24.id

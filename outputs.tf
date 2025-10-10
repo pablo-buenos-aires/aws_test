@@ -41,8 +41,12 @@ output "ssm_interface_endpoints" { # вывод эндпоинто
   }
 }
 
-output "l_templ_1_id" { value = aws_launch_template.l_templ_1.id }
-output "l_templ_arn" { value = aws_launch_template.l_templ_1.arn }
-output "l_templ_1_latest_version" { value = aws_launch_template.l_templ_1.latest_version }
+output "l_templ_1_id" { value = aws_launch_template.l_templ.id }
+output "l_templ_arn" { value = aws_launch_template.l_templ.arn }
+output "l_templ_1_latest_version" { value = aws_launch_template.l_templ.latest_version }
 
 #output "asg_instance_ids" { value = aws_autoscaling_group.priv_asg.instances }
+# инстансы, получаемые из вызова aws через локальный файл
+output "asg_instance_ids" {
+  value = jsondecode(data.local_file.asg_instances_file.content)
+}

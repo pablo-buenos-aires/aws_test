@@ -9,6 +9,6 @@ PRIV_IP="private_ip_1"
 # fi
 
 PUB="$(terraform output -raw public_ip)"
-PRIV="$(terraform output -raw "$PRIV_IP")"
+PRIV_IP="$(terraform output -raw "$PRIV_IP")"
 
 ssh -o "ProxyCommand=ssh -i $KEY_PATH -o IdentitiesOnly=yes -W %h:%p ubuntu@$PUB" -i "$KEY_PATH" -o  IdentitiesOnly=yes  "ubuntu@$PRIV"

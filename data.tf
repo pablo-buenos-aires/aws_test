@@ -13,6 +13,11 @@ data "aws_ami" "ubuntu_24" { # находим последний образ ubun
 }
 
 # data "aws_route_table" "rt_priv_read" { route_table_id = aws_route_table.rt_priv.id }
-
 # from amazon
-data "aws_autoscaling_group" "data_priv_asg" { name = aws_autoscaling_group.priv_asg.name }
+#data "aws_autoscaling_group" "data_priv_asg" { name = aws_autoscaling_group.priv_asg.name }
+
+# Чтение файла через data
+data "local_file" "asg_instances_file" {
+  depends_on = [null_resource.get_priv_instances] # это null_resource с provisioner, pfgbitn d afqk
+  filename   = "asg_instances.json"
+}
