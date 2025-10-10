@@ -21,7 +21,7 @@ fi
 echo "💸 Getting IP of $PRIV_ID"
 # достаем private_ip
 json_ip="$(aws ec2 describe-instances --instance-ids $PRIV_ID --query 'Reservations[].Instances[].PrivateIpAddress')"
-PRIV_IP="$(echo $json_ip | jq -r '.[]')"
+PRIV_IP="$(echo $json_ip | jq -r '.[0]')"
 echo "Private_ip address: $PRIV_IP"
 
 PUB_IP="$(terraform output -raw public_ip)"
