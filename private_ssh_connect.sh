@@ -2,13 +2,28 @@
 set -euo pipefail
 
 KEY_PATH="/home/pablo/terraform-aws/ssh-key.pem"
-PRIV_IP="private_ip_1"
+INST_INDEX="0"
 
-# if [[ $# -ge 1 ]]; then
-#PRIV_IP="private_ip_$1"
-# fi
+if [[ $# -ge 1 ]]; then
+INST_INDEX=$1
+fi
 
-PUB="$(terraform output -raw public_ip)"
-PRIV_IP="$(terraform output -raw "$PRIV_IP")"
+json="$(terraform output -json asg_instance_ids)"
+echo "List of asg instances: $json"
 
-ssh -o "ProxyCommand=ssh -i $KEY_PATH -o IdentitiesOnly=yes -W %h:%p ubuntu@$PUB" -i "$KEY_PATH" -o  IdentitiesOnly=yes  "ubuntu@$PRIV"
+#terraform output -json asg_instance_ids
+PRIV_ID="$(echo $json | jq -r .[$INST_INDEX])"
+# Проверка, что ID не пустой и не null
+if [[ -z "$PRIV_ID" || "$PRIV_ID" == "null" ]]; then
+  echo "❌ Ошибка: элемент с индексом $INST_INDEX не найден." >&2 # markdown!
+  exit 1
+fi
+echo "💸 Getting IP of $PRIV_ID"
+# достаем private_ip
+json_ip="$(aws ec2 describe-instances --instance-ids $PRIV_ID --query 'Reservations[].Instances[].PrivateIpAddress')"
+PRIV_IP="$(echo $json_ip | jq -r '.[]')"
+echo "Private_ip address: $PRIV_IP"
+
+PUB_IP="$(terraform output -raw public_ip)"
+
+ssh -o "ProxyCommand=ssh -i $KEY_PATH -o IdentitiesOnly=yes -W %h:%p ubuntu@$PUB_IP" -i "$KEY_PATH" -o  IdentitiesOnly=yes  "ubuntu@$PRIV_IP"

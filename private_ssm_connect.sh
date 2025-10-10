@@ -22,7 +22,6 @@ fi
 
 echo "💸 Connecting to $PRIV_ID"
 
-
 #aws ssm start-session --target $PRIV_ID
 ssh  -o "ProxyCommand=aws ssm start-session  --target %h  --document-name AWS-StartSSHSession \
 #  --parameters 'portNumber=%p'" -i "$KEY_PATH" "ubuntu@$PRIV_ID"
