@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KEY_PATH="/home/pablo/terraform-aws/ssh-key.pem"
+KEY_PATH="/home/pablo/infra/terraform-aws/ssh-key.pem"
 INST_INDEX="0"
 
 if [[ $# -ge 1 ]]; then

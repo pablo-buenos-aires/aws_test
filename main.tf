@@ -107,7 +107,8 @@ resource "local_file" "file_ssh_pub" {
 # --------------------------------------------------------------------------------------- инстансы
 
 resource "aws_instance" "pub_ubuntu" { # создаем инстанс
-  ami                    = data.aws_ami.ubuntu_24.id
+  #ami                    = data.aws_ami.ubuntu_24.id
+  ami = "ami-0cdd87dc388f1f6e1"
   instance_type          = var.t3
   subnet_id              = aws_subnet.public_subnet.id # в публичной полдсети
   vpc_security_group_ids = [aws_security_group.nat_sg.id] # группа безопасности
@@ -117,17 +118,9 @@ resource "aws_instance" "pub_ubuntu" { # создаем инстанс
 
   iam_instance_profile = aws_iam_instance_profile.ssm_profile.name # профиль от роли SSM
 
-  user_data = <<EOT
-#!/bin/bash
-set -euxo pipefail  # error,undefuned, exec, честные пайплайны ошибок
-export DEBIAN_FRONTEND=noninteractive # чтобы не было вопросов
-echo "netfilter-persistent netfilter-persistent/autosave_v4 boolean true" | debconf-set-selections
-echo "netfilter-persistent netfilter-persistent/autosave_v6 boolean false" | debconf-set-selections
-
-#  пакеты для автосохранения правил
-apt-get update -y
-apt-get install -y netfilter-persistent
-
+  # user_data = file("${path.module}/user_data_public.sh")
+  # в образе уже установили софт
+  user_data =  <<EOF
 # Включаем форвардинг и делаем это постоянным
 sysctl -w net.ipv4.ip_forward=1
 echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-nat.conf #  reboot-safe
@@ -146,8 +139,7 @@ fi
 #
 netfilter-persistent save
 systemctl enable --now netfilter-persistent
-EOT
-
+EOF
 }
 # ---------------------------------------------------------- два приватный инстанса в разных зонах доступности
 # шаблон без привязки к подсетям
