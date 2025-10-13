@@ -1,3 +1,16 @@
+
+# ------------------------------------------------------------------------------- /modules
+module "vpc" {
+  source              = "./modules/vpc"
+  vpc_name            = "test_vpc"
+  vpc_cidr            = "10.0.0.0/16"
+  public_subnet_cidr =  "10.0.1.0/24"
+  private_subnet_cidrs = ["10.0.2.0/24", "10.0.3.0/24"] # для каждой подсети должно быть ссответствие azs
+  azs = ["sa-east-1a", "sa-east-1b"]
+
+}
+
+# ------------------------------------------------------------------------------- /modules
 resource "aws_vpc" "my_vpc" { # создаем vpc
   	cidr_block           = "10.0.0.0/16" # диапазон адресов
   	enable_dns_hostnames = true    # включаем dns hostname, для доступа к публичному инстансу	
@@ -159,7 +172,7 @@ resource "aws_autoscaling_group" "priv_asg" {
   name                      = "priv-asg"
   min_size                  = 2
   desired_capacity          = 2
-  max_size                  = 4
+  max_size                  = 2
   health_check_type         = "EC2" # проверка доступности инстанса
   health_check_grace_period = 120 # время на инит, потом проверка доступности
   capacity_rebalance        = true # если зона отвалится, на других сделает инстансы

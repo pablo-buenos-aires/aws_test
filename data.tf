@@ -1,7 +1,7 @@
 data "aws_caller_identity" "me" {} #  ресурсы для запроса моего arn, кем являюсь
 data "aws_region" "here" {} # запроса региона для output
 
-data "aws_availability_zones" "zones" { state = "available" } # встроенный источник данных
+# data "aws_availability_zones" "zones" { state = "available" } # встроенный источник данных
 
 data "aws_ami" "ubuntu_24" { # находим последний образ ubuntu 24.04
   most_recent = true
