@@ -1,4 +1,6 @@
 #!/bin/bash
+
+# --- не используется целиком
 set -euxo pipefail  # error,undefuned, exec, честные пайплайны ошибок
 export DEBIAN_FRONTEND=noninteractive # чтобы не было вопросов
 echo "netfilter-persistent netfilter-persistent/autosave_v4 boolean true" | debconf-set-selections
