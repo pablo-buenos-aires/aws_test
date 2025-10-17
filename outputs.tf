@@ -1,8 +1,11 @@
 
 # output "account_id" { value = data.aws_caller_identity.me.account_id }
 output "arn"        { value = data.aws_caller_identity.me.arn } # вывод параметров ресурса
-output "region"     { value = data.aws_region.here.region } # и региона
+output "region_here"     { value = data.aws_region.here.region } # и региона
+output "region_from_vpc"     { value = module.vpc.region}
+//output "region_privider"     { value = var.region}
 
+# и региона
 //output "vpc_id"   { value =  aws_vpc.my_vpc.id } # вывод vpc id
 
 /*
@@ -29,18 +32,6 @@ output "public_ip"    { value = aws_instance.pub_ubuntu.public_ip }
 #output "private_ip_2"    { value = aws_instance.priv_ubuntu_2.private_ip } #
 
 output "public_dns"   { value = aws_instance.pub_ubuntu.public_dns } # DNS
-
-output "ssm_interface_endpoints" { # вывод эндпоинто
-  value = {
-    for k, endp in aws_vpc_endpoint.endpoints: # генератор k -> ключ словаря
-    k => { # значения списком
-      id           = endp.id
-      service      = endp.service_name
-      # dns_names    = endp.dns_entry[*].dns_name
-      # network_ifcs = endp.network_interface_ids # какие интерфейсы созданы для эндпоинта
-    }
-  }
-}
 
 output "l_templ_id" { value = aws_launch_template.l_templ.id }
 output "l_templ_arn" { value = aws_launch_template.l_templ.arn }

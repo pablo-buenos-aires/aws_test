@@ -1,3 +1,5 @@
+
+
 terraform { # блок настройки терраформ
 	required_version = ">= 1.2" # страховка от несовместимости кода со старой версией терраформ
 	# офиц. плагин для авс, 6 версия актуальная
@@ -5,4 +7,10 @@ terraform { # блок настройки терраформ
 
 	}
 
-provider "aws" { region = "sa-east-1" } # блок провайдера
+variable "region" {
+    type = string
+    default     = "sa-east-1"
+}
+
+provider "aws" { region = var.region }
+

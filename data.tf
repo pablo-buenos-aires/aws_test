@@ -16,7 +16,6 @@ data "aws_ami" "ubuntu_24" { # находим последний образ ubun
 # from amazon
 #data "aws_autoscaling_group" "data_priv_asg" { name = aws_autoscaling_group.priv_asg.name }
 
-
 # Чтение файла через data
 
 data "local_file" "asg_instances_file" {

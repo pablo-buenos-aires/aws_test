@@ -8,6 +8,12 @@ variable "vpc_azs" { type = list(string) }
 variable "public_subnet_cidr" { type = string }
 variable "private_subnet_cidrs" { type = list(string) }
 
+# делаем регион для ssm
+locals {
+  az1 = try(element(var.vpc_azs, 0),  error("❌ Ошибка: нужно передать минимум одну зону."))
+  region = substr(local.az1, 0, length(local.az1) - 1) # регион = имя зоны без последнего символа
+}
+
 # основная VPC
 resource "aws_vpc" "main_vpc" {
   cidr_block = var.vpc_cidr
@@ -114,7 +120,6 @@ resource "aws_route_table_association" "rt_pub_ass" { # Привязка таб�
   	route_table_id = aws_route_table.rt_pub.id
 	}
 
-
 /*
 # -отключим маршрут, доступ по SSM теперь
 resource "aws_route" "rt_priv_route" { # нужен отдельно маршрут, инлайн нельзя для instance_id
@@ -125,33 +130,23 @@ resource "aws_route" "rt_priv_route" { # нужен отдельно маршр�
   depends_on = [aws_instance.pub_ubuntu]   # дождаться инстанса
   }
 */
+#------------------------------------------------------------------------- настройка  endpoints
+resource "aws_vpc_endpoint" "endpoints" {
+   for_each = {
+    ssm         = "com.amazonaws.${local.region}.ssm"
+    ec2messages = "com.amazonaws.${local.region}.ec2messages"
+    ssmmessages = "com.amazonaws.${local.region}.ssmmessages"
+  }
+  vpc_id              = aws_vpc.main_vpc.id
+  service_name        = each.value
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids          = aws_subnet.private_subnet[*].id # в каждой подсети эндпоинты
+  security_group_ids  = [aws_security_group.endpoint_sg.id]
+}
 
 
-
-# -------------------------------------------- переменные для доступа из др. модулей
-output "vpc_id" { value = aws_vpc.main_vpc.id }
-output "vpc_cidr" { value = aws_vpc.main_vpc.cidr_block}
-output "igw_id" { value = aws_internet_gateway.igw.id }
-
-# зоны доступности для asg - такие де, как для vpc
-output "vpc_asg_azs" {  value = var.vpc_azs }
-
-output "public_sg_id" {   value = aws_security_group.public_sg.id } # SG
-output "private_sg_id" {   value = aws_security_group.private_sg.id }
-output "endpoint_sg_id" {   value = aws_security_group.endpoint_sg.id }
-
-# подсети
-output "public_subnet_id" { value  = aws_subnet.public_subnet.id }
-output "private_subnet_ids" {  value = aws_subnet.private_subnet[*].id }
-output "private_rt_ass_ids" {  value = aws_route_table_association.rt_priv_ass[*].id }
-
-
-# таблицы и маршруты
-output "public_rt_id" { value  = aws_route_table.rt_pub }
-output "private_rt_id" { value  = aws_route_table.rt_priv }
-# вывод  маршрутов
-output "rt_pub_routes" {  value = aws_route_table.rt_pub.route }  # вывод маршрутов
-output "rt_priv_routes" {  value = aws_route_table.rt_priv.route }
 
 
 

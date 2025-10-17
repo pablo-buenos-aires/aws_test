@@ -1,4 +1,3 @@
-
 # ------------------------------------------------------------------------------- /modules
 module "vpc" {
   source              = "./modules/vpc"
@@ -6,8 +5,7 @@ module "vpc" {
   vpc_cidr            = "10.0.0.0/16"
   public_subnet_cidr =  "10.0.1.0/24"
   private_subnet_cidrs = ["10.0.2.0/24", "10.0.3.0/24"] # для каждой подсети должно быть ссответствие azs
-  vpc_azs = ["sa-east-1a", "sa-east-1b"]
-
+  vpc_azs = ["sa-east-1a", "sa-east-1b"] # из первого возьмется регион для эндпоинтов ssm
 }
 
 # ------------------------------------------------------------------------------------------- ключи
@@ -105,7 +103,7 @@ resource "aws_autoscaling_group" "priv_asg" {
   # в каком порядке завершать инстансы при уменьшении
   termination_policies = ["OldestInstance", "ClosestToNextInstanceHour"] # старые и где оплаченые часы меньше
 
-  depends_on = [ module.vpc, aws_vpc_endpoint.endpoints]         # чтобы SSM работал
+  depends_on = [ module.vpc]         # чтобы SSM работал
 
 }
 /*
@@ -164,18 +162,3 @@ resource "aws_iam_instance_profile" "ssm_profile" { # профиль на баз
   role = aws_iam_role.ssm_role.name
 }
 
-#------------------------------------------------------------------------- настройка  endpoints
-resource "aws_vpc_endpoint" "endpoints" {
-   for_each = {
-    ssm         = "com.amazonaws.${data.aws_region.here.region}.ssm"
-    ec2messages = "com.amazonaws.${data.aws_region.here.region}.ec2messages"
-    ssmmessages = "com.amazonaws.${data.aws_region.here.region}.ssmmessages"
-  }
-  vpc_id              = module.vpc.vpc_id
-  service_name        = each.value
-  vpc_endpoint_type   = "Interface"
-  private_dns_enabled = true
-
-  subnet_ids          = module.vpc.private_subnet_ids # в каждой подсети эндпоинты
-  security_group_ids  = [module.vpc.endpoint_sg_id]
-}
