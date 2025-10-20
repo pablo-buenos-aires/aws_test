@@ -1,34 +1,49 @@
 #variable "vpc_name" { type = string }
 
 
-variable "vpc_cidr" { type = string }
-# списки зон для подсетей, для публичной - первая в списке
-variable "vpc_azs" { type = list(string) }
-
-variable "public_subnet_cidr" { type = string }
-variable "private_subnet_cidrs" { type = list(string) }
-
-# делаем регион для ssm
-locals {
-  az1 = try(element(var.vpc_azs, 0),  error("❌ Ошибка: нужно передать минимум одну зону."))
-  region = substr(local.az1, 0, length(local.az1) - 1) # регион = имя зоны без последнего символа
+variable "vpc_cidr" {
+  type = string
+  default = "10.0.0.0/16"
 }
+# списки зон для подсетей, для публичной - первая в списке
+variable "vpc_azs" {
+  type = list(string)
+  default = ["sa-east-1a", "sa-east-1b"]
+
+  validation {
+    condition = length(var.vpc_azs) == 2
+    error_message = "❌  Зон должно быть 2"
+  }
+}
+
+variable "public_subnet_cidr" {
+  type = string
+  default = "10.0.1.0/24"
+}
+
+variable "private_subnet_cidrs" {
+  type = list(string)
+  default = ["10.0.2.0/24", "10.0.3.0/24"]
+  validation {
+    condition = length(var.vpc_azs) == length(var.private_subnet_cidrs)
+    error_message = "❌  Количество зон и подсетей не совпадают"
+  }
+}
+
+# делаем регион для ssm endpoints
+locals {
+  az1 = try(element(var.vpc_azs, 0),  error("❌ Количество зон = 0"))
+  region = substr(local.az1, 0, length(local.az1) - 1)
+  err_priv = length(var.private_subnet_cidrs) != length(var.vpc_azs) ?  error("❌ Кол. зон != кол. подсетей") : true
+ }
 
 # основная VPC
 resource "aws_vpc" "main_vpc" {
   cidr_block = var.vpc_cidr
-  #enable_dns_support   = true
   enable_dns_hostnames = true
 }
 
  # подсети
-resource "aws_subnet" "private_subnet" {
-  count = length(var.private_subnet_cidrs) #
-  vpc_id = aws_vpc.main_vpc.id
-  cidr_block = var.private_subnet_cidrs[count.index]
-  availability_zone = var.vpc_azs[count.index]
-}
-
 resource "aws_subnet" "public_subnet" {
   vpc_id                  = aws_vpc.main_vpc.id
   cidr_block              = var.public_subnet_cidr
@@ -36,6 +51,15 @@ resource "aws_subnet" "public_subnet" {
   map_public_ip_on_launch = true             # Автоназначение публичных IP в этой подсети
   # tags = {  Name = "${var.vpc_name}-public" }
 }
+
+resource "aws_subnet" "private_subnet" {
+  count = length(var.private_subnet_cidrs) #
+  vpc_id = aws_vpc.main_vpc.id
+  cidr_block = var.private_subnet_cidrs[count.index]
+  availability_zone = var.vpc_azs[count.index]
+}
+
+
 
 resource "aws_internet_gateway" "igw" { vpc_id = aws_vpc.main_vpc.id } # IGW для доступа VPC в интернет
 
@@ -120,8 +144,9 @@ resource "aws_route_table_association" "rt_pub_ass" { # Привязка таб�
   	route_table_id = aws_route_table.rt_pub.id
 	}
 
-/*
+
 # -отключим маршрут, доступ по SSM теперь
+/*
 resource "aws_route" "rt_priv_route" { # нужен отдельно маршрут, инлайн нельзя для instance_id
   route_table_id         = aws_route_table.rt_priv.id
   destination_cidr_block = "0.0.0.0/0"

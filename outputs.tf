@@ -3,6 +3,8 @@
 output "arn"        { value = data.aws_caller_identity.me.arn } # вывод параметров ресурса
 output "region_here"     { value = data.aws_region.here.region } # и региона
 output "region_from_vpc"     { value = module.vpc.region}
+output "private_subnet_ids" {  value = module.vpc.private_subnet_ids }
+
 //output "region_privider"     { value = var.region}
 
 # и региона
