@@ -6,8 +6,21 @@ output "region_from_vpc"     { value = module.vpc.region}
 output "private_subnet_ids" {  value = module.vpc.private_subnet_ids }
 
 //output "region_privider"     { value = var.region}
+output "public_ip"    { value = module.ec2.public_ip }
 
-# и региона
+output "asg_name"   { value =  module.ec2.asg_name }
+output "asg_arn"    { value = module.ec2.asg_arn }
+
+output "instance_profile_name_ec2" { value = module.ec2.instance_profile_name }
+
+#output "public_instance_id"  { value = aws_instance.pub_ubuntu.id } # id инстанса
+#output "private_instance_id_1"  { value = aws_instance.priv_ubuntu_1.id } # id инстанса 2
+#output "private_instance_id_2"  { value = aws_instance.priv_ubuntu_2.id } # id инстанса 2
+
+output "public_dns"   { value = module.ec2.public_dns } # DNS
+
+output "l_templ_id" { value = module.ec2.l_templ_id }
+output "l_templ_arn" { value = module.ec2.l_templ_arn }# и региона
 //output "vpc_id"   { value =  aws_vpc.my_vpc.id } # вывод vpc id
 
 /*
@@ -25,19 +38,6 @@ output "rt_priv_routes" {  value = aws_route_table.rt_priv.route }
 
 #output "image_name" { value = data.aws_ami.ubuntu_24.name } # имя образа
 
-output "public_instance_id"  { value = aws_instance.pub_ubuntu.id } # id инстанса
-#output "private_instance_id_1"  { value = aws_instance.priv_ubuntu_1.id } # id инстанса 2
-#output "private_instance_id_2"  { value = aws_instance.priv_ubuntu_2.id } # id инстанса 2
-
-output "public_ip"    { value = aws_instance.pub_ubuntu.public_ip }
-#output "private_ip_1"    { value = aws_instance.priv_ubuntu_1.private_ip } #
-#output "private_ip_2"    { value = aws_instance.priv_ubuntu_2.private_ip } #
-
-output "public_dns"   { value = aws_instance.pub_ubuntu.public_dns } # DNS
-
-output "l_templ_id" { value = aws_launch_template.l_templ.id }
-output "l_templ_arn" { value = aws_launch_template.l_templ.arn }
-output "l_templ__latest_version" { value = aws_launch_template.l_templ.latest_version }
 
 #output "asg_instance_ids" { value = aws_autoscaling_group.priv_asg.instances }
 # инстансы, получаемые из вызова aws через локальный файл

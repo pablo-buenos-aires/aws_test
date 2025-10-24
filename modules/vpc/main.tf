@@ -34,7 +34,7 @@ variable "private_subnet_cidrs" {
 locals {
   az1 = try(element(var.vpc_azs, 0),  error("❌ Количество зон = 0"))
   region = substr(local.az1, 0, length(local.az1) - 1)
-  err_priv = length(var.private_subnet_cidrs) != length(var.vpc_azs) ?  error("❌ Кол. зон != кол. подсетей") : true
+  #err_priv = length(var.private_subnet_cidrs) != length(var.vpc_azs) ?  error("❌ Кол. зон != кол. подсетей") : true
  }
 
 # основная VPC
