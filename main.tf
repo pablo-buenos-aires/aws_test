@@ -9,7 +9,7 @@ module "vpc" {
 
 module "ec2" {
   source  = "./modules/ec2"
-  vpc_cidr  = "10.0.0.0/16"
+  vpc_cidr  = module.vpc.vpc_cidr
   key_name  = aws_key_pair.ssh_aws_key.key_name
   ami_id =  "ami-0cdd87dc388f1f6e1"
 
