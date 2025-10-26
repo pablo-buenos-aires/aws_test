@@ -11,15 +11,15 @@ module "ec2" {
   source  = "./modules/ec2"
   vpc_cidr  = module.vpc.vpc_cidr
   key_name  = aws_key_pair.ssh_aws_key.key_name
-  ami_id =  "ami-0cdd87dc388f1f6e1"
-
+  ami_id =  "ami-0cdd87dc388f1f6e1" // образ с net-persistant
+  // проброс подсетей и групп безопасности
   public_subnet_id = module.vpc.public_subnet_id
   private_subnet_ids = module.vpc.private_subnet_ids
 
   private_sg_id = module.vpc.private_sg_id
   public_sg_id = module.vpc.public_sg_id
-  instance_profile_name = aws_iam_instance_profile.ssm_profile.name # профиль от роли SSM
 
+  instance_profile_name = aws_iam_instance_profile.ssm_profile.name # профиль от роли SSM
 }
 
 # -------------------------------------------------------------------- ключи здесь оставим
@@ -29,7 +29,6 @@ resource "tls_private_key" "ssh_key" { # генерация ключа чере�
 	}
 
 resource "aws_key_pair" "ssh_aws_key" {  # регистрируем ключ
-
   	public_key = tls_private_key.ssh_key.public_key_openssh # ключ в формате Openssh
     key_name   = "tf-ssh-key" # без этого не связывает ключи корректно
 
@@ -90,7 +89,7 @@ resource "aws_iam_instance_profile" "ssm_profile" { # профиль на баз
 
 # для обновления списка инстансов в asg
 resource "terraform_data" "get_priv_instances" {
-  # 🔁 форсируем замену ресурса на каждом плане/аплае
+  # форсируем замену ресурса на каждом плане/аплае
   triggers_replace = timestamp()  # <<< меняется каждый apply => ресурс пересоздаётся
   depends_on = [module.ec2.asg_arn]
 

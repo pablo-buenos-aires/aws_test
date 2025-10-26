@@ -1,21 +1,4 @@
 
-// приходят из модкля впц
-variable "private_subnet_ids" { type = list(string) }
-variable "public_subnet_id"   { type = string }
-variable "public_sg_id"      { type = string }
-variable "private_sg_id"  { type = string }
-variable "ami_id"          { type = string }
-
-variable "instance_type"   {
-          type = string
-          default = "t3.micro"
-}
-
-variable "key_name"          { type = string }
-variable "instance_profile_name" { type = string}
-// for nat
-variable "vpc_cidr"             { type = string }
-
 
 resource "aws_instance" "pub_ubuntu" { # создаем инстанс
   #ami                    = data.aws_ami.ubuntu_24.id
@@ -94,18 +77,3 @@ resource "aws_autoscaling_group" "priv_asg" {
  # depends_on = [var.vpc_id] # Terraform поймет зависимость через входную переменную
 }
 
-
-
-output "asg_name"   { value = aws_autoscaling_group.priv_asg.name }
-output "asg_arn"    { value = aws_autoscaling_group.priv_asg.arn }
-
-output "instance_profile_name" { value = var.instance_profile_name }
-
-output "public_instance_id"  { value = aws_instance.pub_ubuntu.id } # id инстанса
-output "public_ip"    { value = aws_instance.pub_ubuntu.public_ip }
-
-output "public_dns"   { value = aws_instance.pub_ubuntu.public_dns } # DNS
-
-output "l_templ_id" { value = aws_launch_template.l_templ.id }
-output "l_templ_arn" { value = aws_launch_template.l_templ.arn }
-#output "l_templ__latest_version" { value = aws_launch_template.l_templ.latest_version }
