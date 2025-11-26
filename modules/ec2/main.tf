@@ -7,7 +7,7 @@ resource "aws_instance" "pub_ubuntu" { # создаем инстанс
 
   subnet_id = var.public_subnet_id # в публичной полдсети
   vpc_security_group_ids = [var.public_sg_id] # группа безопасности
-  key_name               = var.key_name # созданный выше SSH ключ
+  key_name   = var.key_name # SSH ключ
   associate_public_ip_address = true # выделение внешнего IP
   source_dest_check = false #n чтобы работал NAT
 
@@ -42,7 +42,7 @@ resource "aws_launch_template" "l_templ" {
   name_prefix = "l-templ"
   #image_id    = data.aws_ami.ubuntu_24.id
   image_id = "ami-0cdd87dc388f1f6e1"
-  instance_type = var.t3
+  instance_type = var.instance_type
   #key_name = aws_key_pair.ssh_aws_key.key_name
   key_name = var.key_name
  # нужен блок
@@ -53,13 +53,13 @@ resource "aws_launch_template" "l_templ" {
 }
 # -------------------------------------------------------------------------- Asg
 resource "aws_autoscaling_group" "priv_asg" {
-  name                      = "priv-asg"
-  min_size                  = 2
-  desired_capacity          = 2
-  max_size                  = 2
-  health_check_type         = "EC2" # проверка доступности инстанса
+  name = "priv-asg"
+  min_size   = 2
+  desired_capacity = 2
+  max_size  = 2
+  health_check_type  = "EC2" # проверка доступности инстанса
   health_check_grace_period = 120 # время на инит, потом проверка доступности
-  capacity_rebalance        = true # если зона отвалится, на других сделает инстансы
+  capacity_rebalance  = true # если зона отвалится, на других сделает инстансы
 
   wait_for_capacity_timeout = "10m" # для терраформ, чтобы  ожидать перехода asg в нужное состояние
   # приватные подсети!! (subnets_id, не зоны доступности). Каждая приватная сеть в своей зоне
@@ -76,4 +76,6 @@ resource "aws_autoscaling_group" "priv_asg" {
   depends_on = [var.private_subnet_ids]         # чтобы SSM работал
  # depends_on = [var.vpc_id] # Terraform поймет зависимость через входную переменную
 }
+
+
 
